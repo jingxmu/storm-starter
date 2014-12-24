@@ -1,90 +1,112 @@
 package storm.starter;
 
-import backtype.storm.Config;
-import backtype.storm.LocalCluster;
-import backtype.storm.StormSubmitter;
-import backtype.storm.task.ShellBolt;
-import backtype.storm.topology.BasicOutputCollector;
-import backtype.storm.topology.IRichBolt;
-import backtype.storm.topology.OutputFieldsDeclarer;
-import backtype.storm.topology.TopologyBuilder;
-import backtype.storm.topology.base.BaseBasicBolt;
-import backtype.storm.tuple.Fields;
-import backtype.storm.tuple.Tuple;
-import backtype.storm.tuple.Values;
-import storm.starter.spout.RandomSentenceSpout;
-
 import java.util.HashMap;
 import java.util.Map;
 
+import storm.starter.spout.RandomSentenceSpout;
+import backtype.storm.Config;
+import backtype.storm.LocalCluster;
+import backtype.storm.StormSubmitter;
+import backtype.storm.task.OutputCollector;
+import backtype.storm.task.TopologyContext;
+import backtype.storm.topology.BasicOutputCollector;
+import backtype.storm.topology.OutputFieldsDeclarer;
+import backtype.storm.topology.TopologyBuilder;
+import backtype.storm.topology.base.BaseBasicBolt;
+import backtype.storm.topology.base.BaseRichBolt;
+import backtype.storm.tuple.Fields;
+import backtype.storm.tuple.Tuple;
+import backtype.storm.tuple.Values;
+
 /**
- * This topology demonstrates Storm's stream groupings and multilang capabilities.
+ * This topology demonstrates Storm's stream groupings and multilang
+ * capabilities.
  */
 public class WordCountTopology {
-  public static class SplitSentence extends ShellBolt implements IRichBolt {
+	public static class SplitSentence extends BaseRichBolt {
+		OutputCollector collector;
 
-    public SplitSentence() {
-      super("python", "splitsentence.py");
-    }
+		@Override
+		public void prepare(Map stormConf, TopologyContext context,
+				OutputCollector collector) {
+			this.collector = collector;
+		}
 
-    @Override
-    public void declareOutputFields(OutputFieldsDeclarer declarer) {
-      declarer.declare(new Fields("word"));
-    }
+		@Override
+		public void execute(Tuple input) {
+			String[] words = input.getString(0).split("[\\s]+");
+			for (String word : words) {
+				collector.emit(input, new Values(word));
+			}
+			collector.ack(input);
+		}
 
-    @Override
-    public Map<String, Object> getComponentConfiguration() {
-      return null;
-    }
-  }
+		@Override
+		public void declareOutputFields(OutputFieldsDeclarer declarer) {
+			declarer.declare(new Fields("word"));
+		}
 
-  public static class WordCount extends BaseBasicBolt {
-    Map<String, Integer> counts = new HashMap<String, Integer>();
+	}
 
-    @Override
-    public void execute(Tuple tuple, BasicOutputCollector collector) {
-      String word = tuple.getString(0);
-      Integer count = counts.get(word);
-      if (count == null)
-        count = 0;
-      count++;
-      counts.put(word, count);
-      collector.emit(new Values(word, count));
-    }
+	public static class WordCount extends BaseBasicBolt {
+		Map<String, Integer> counts = new HashMap<String, Integer>();
 
-    @Override
-    public void declareOutputFields(OutputFieldsDeclarer declarer) {
-      declarer.declare(new Fields("word", "count"));
-    }
-  }
+		@Override
+		public void execute(Tuple tuple, BasicOutputCollector collector) {
+			String word = tuple.getString(0);
+			Integer count = counts.get(word);
+			if (count == null)
+				count = 0;
+			count++;
+			counts.put(word, count);
+			collector.emit(new Values(word, count));
+		}
 
-  public static void main(String[] args) throws Exception {
+		@Override
+		public void declareOutputFields(OutputFieldsDeclarer declarer) {
+			declarer.declare(new Fields("word", "count"));
+		}
 
-    TopologyBuilder builder = new TopologyBuilder();
+		@Override
+		public void cleanup() {
+			System.out.println("===The result is :");
+			for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+				System.out.println(entry.getKey() + "\t" + entry.getValue());
+			}
+			System.out.println("====Result end.");
+		}
 
-    builder.setSpout("spout", new RandomSentenceSpout(), 5);
+	}
 
-    builder.setBolt("split", new SplitSentence(), 8).shuffleGrouping("spout");
-    builder.setBolt("count", new WordCount(), 12).fieldsGrouping("split", new Fields("word"));
+	public static void main(String[] args) throws Exception {
 
-    Config conf = new Config();
-    conf.setDebug(true);
+		TopologyBuilder builder = new TopologyBuilder();
 
+		builder.setSpout("spout", new RandomSentenceSpout(), 2);
 
-    if (args != null && args.length > 0) {
-      conf.setNumWorkers(3);
+		builder.setBolt("split", new SplitSentence(), 3).shuffleGrouping(
+				"spout");
+		builder.setBolt("count", new WordCount(), 5).fieldsGrouping("split",
+				new Fields("word"));
 
-      StormSubmitter.submitTopology(args[0], conf, builder.createTopology());
-    }
-    else {
-      conf.setMaxTaskParallelism(3);
+		Config conf = new Config();
+		conf.setDebug(true);
 
-      LocalCluster cluster = new LocalCluster();
-      cluster.submitTopology("word-count", conf, builder.createTopology());
+		if (args != null && args.length > 0) {
+			conf.setNumWorkers(3);
 
-      Thread.sleep(10000);
+			StormSubmitter.submitTopology(args[0], conf,
+					builder.createTopology());
+		} else {
+			// conf.setMaxTaskParallelism(3);
 
-      cluster.shutdown();
-    }
-  }
+			LocalCluster cluster = new LocalCluster();
+			cluster.submitTopology("word-count", conf, builder.createTopology());
+
+			Thread.sleep(10000);
+			cluster.killTopology("word-count");
+
+			cluster.shutdown();
+		}
+	}
 }

@@ -9,6 +9,7 @@ import backtype.storm.drpc.LinearDRPCTopologyBuilder;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.topology.BasicOutputCollector;
 import backtype.storm.topology.OutputFieldsDeclarer;
+import backtype.storm.topology.TopologyBuilder;
 import backtype.storm.topology.base.BaseBasicBolt;
 import backtype.storm.topology.base.BaseBatchBolt;
 import backtype.storm.tuple.Fields;
@@ -53,7 +54,7 @@ public class ReachTopology {
   public static class GetTweeters extends BaseBasicBolt {
     @Override
     public void execute(Tuple tuple, BasicOutputCollector collector) {
-      Object id = tuple.getValue(0);
+      Object id = tuple.getValue(0);  // request id
       String url = tuple.getString(1);
       List<String> tweeters = TWEETERS_DB.get(url);
       if (tweeters != null) {
@@ -119,7 +120,7 @@ public class ReachTopology {
     BatchOutputCollector _collector;
     Object _id;
     int _count = 0;
-
+    
     @Override
     public void prepare(Map conf, TopologyContext context, BatchOutputCollector collector, Object id) {
       _collector = collector;
@@ -148,6 +149,7 @@ public class ReachTopology {
     builder.addBolt(new GetFollowers(), 12).shuffleGrouping();
     builder.addBolt(new PartialUniquer(), 6).fieldsGrouping(new Fields("id", "follower"));
     builder.addBolt(new CountAggregator(), 3).fieldsGrouping(new Fields("id"));
+    
     return builder;
   }
 

@@ -23,7 +23,7 @@ public class ExclamationTopology {
 
   public static class ExclamationBolt extends BaseRichBolt {
     OutputCollector _collector;
-
+ 
     @Override
     public void prepare(Map conf, TopologyContext context, OutputCollector collector) {
       _collector = collector;
@@ -45,7 +45,6 @@ public class ExclamationTopology {
 
   public static void main(String[] args) throws Exception {
     TopologyBuilder builder = new TopologyBuilder();
-
     builder.setSpout("word", new TestWordSpout(), 10);
     builder.setBolt("exclaim1", new ExclamationBolt(), 3).shuffleGrouping("word");
     builder.setBolt("exclaim2", new ExclamationBolt(), 2).shuffleGrouping("exclaim1");
